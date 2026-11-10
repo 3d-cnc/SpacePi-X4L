@@ -10,9 +10,9 @@ namespace x4l {
 
 static const char *const TAG = "x4l";
 
-static uint8_t pruefsumme(const char *von, const char *bis) {
+static uint8_t checksum(const char *from, const char *to) {
   uint8_t x = 0;
-  for (const char *p = von; p < bis; p++) x ^= (uint8_t) *p;
+  for (const char *p = from; p < to; p++) x ^= (uint8_t) *p;
   return x;
 }
 
@@ -22,107 +22,107 @@ void X4LComponent::loop() {
     if (!this->read_byte(&c)) break;
     if (c == '\r') continue;
     if (c == '\n') {
-      if (!this->puffer_.empty()) this->zeile_auswerten_(this->puffer_);
-      this->puffer_.clear();
+      if (!this->buffer_.empty()) this->parse_line_(this->buffer_);
+      this->buffer_.clear();
       continue;
     }
-    if (this->puffer_.size() < 120) this->puffer_.push_back((char) c);
-    else this->puffer_.clear();  // zu lang: verwerfen
+    if (this->buffer_.size() < 120) this->buffer_.push_back((char) c);
+    else this->buffer_.clear();  // too long: discard
   }
 }
 
-void X4LComponent::zeile_auswerten_(const std::string &z) {
+void X4LComponent::parse_line_(const std::string &z) {
   // Format: $....*HH
-  size_t stern = z.rfind('*');
-  if (z.size() < 5 || z[0] != '$' || stern == std::string::npos || stern + 3 != z.size()) {
-    this->zeilen_fehler_++;
-    ESP_LOGW(TAG, "Unbekanntes Zeilenformat verworfen: %s", z.c_str());
+  size_t star = z.rfind('*');
+  if (z.size() < 5 || z[0] != '$' || star == std::string::npos || star + 3 != z.size()) {
+    this->lines_rejected_++;
+    ESP_LOGW(TAG, "Unknown line format, discarded: %s", z.c_str());
     return;
   }
-  uint8_t erwartet = (uint8_t) strtoul(z.substr(stern + 1, 2).c_str(), nullptr, 16);
-  if (pruefsumme(z.c_str() + 1, z.c_str() + stern) != erwartet) {
-    this->zeilen_fehler_++;
-    ESP_LOGW(TAG, "Pruefsumme falsch: %s", z.c_str());
+  uint8_t expected = (uint8_t) strtoul(z.substr(star + 1, 2).c_str(), nullptr, 16);
+  if (checksum(z.c_str() + 1, z.c_str() + star) != expected) {
+    this->lines_rejected_++;
+    ESP_LOGW(TAG, "Wrong checksum: %s", z.c_str());
     return;
   }
-  std::string inhalt = z.substr(1, stern - 1);
+  std::string body = z.substr(1, star - 1);
 
-  if (inhalt.rfind("V,", 0) == 0) {
-    this->version_ = inhalt.substr(2);
-    this->zeilen_ok_++;
+  if (body.rfind("V,", 0) == 0) {
+    this->version_ = body.substr(2);
+    this->lines_ok_++;
     return;
   }
-  if (inhalt.rfind("OK,", 0) == 0 || inhalt.rfind("ERR,", 0) == 0) {
-    ESP_LOGI(TAG, "Trockner: %s", inhalt.c_str());
-    this->zeilen_ok_++;
+  if (body.rfind("OK,", 0) == 0 || body.rfind("ERR,", 0) == 0) {
+    ESP_LOGI(TAG, "Dryer: %s", body.c_str());
+    this->lines_ok_++;
     return;
   }
-  if (inhalt.rfind("K,", 0) == 0) {
-    // 13 Zahlen: k, laeuft, soll, dauer, rest, material, t*100, rh*100, ntc*10, leistung, fehler, luefter, ok
-    // (bis 10.11. stand hier faelschlich 14 - jede Zeile wurde still verworfen)
-    static const int FELDER = 13;
-    long w[FELDER];
+  if (body.rfind("K,", 0) == 0) {
+    // 13 numbers: k, running, setpoint, duration, remaining, material, t*100, rh*100, ntc*10,
+    // power, fault, fan, sensor_ok
+    static const int FIELDS = 13;
+    long w[FIELDS];
     int n = 0;
-    const char *p = inhalt.c_str() + 2;
-    while (n < FELDER) {
-      char *ende;
-      w[n++] = strtol(p, &ende, 10);
-      if (*ende == ',') p = ende + 1;
+    const char *p = body.c_str() + 2;
+    while (n < FIELDS) {
+      char *end;
+      w[n++] = strtol(p, &end, 10);
+      if (*end == ',') p = end + 1;
       else break;
     }
-    if (n != FELDER || w[0] < 0 || w[0] > 1) {
-      this->zeilen_fehler_++;
-      ESP_LOGW(TAG, "Statuszeile mit %d statt %d Feldern verworfen: %s", n, FELDER, z.c_str());
+    if (n != FIELDS || w[0] < 0 || w[0] > 1) {
+      this->lines_rejected_++;
+      ESP_LOGW(TAG, "Status line with %d instead of %d fields discarded: %s", n, FIELDS, z.c_str());
       return;
     }
-    KammerStatus &k = this->kammer_[w[0]];
-    k.laeuft = w[1] != 0;
-    k.soll = (int) w[2];
-    k.dauer_min = (int) w[3];
-    k.rest_s = (uint32_t) w[4];
+    ChamberStatus &k = this->chamber_[w[0]];
+    k.running = w[1] != 0;
+    k.setpoint = (int) w[2];
+    k.duration_min = (int) w[3];
+    k.remaining_s = (uint32_t) w[4];
     k.material = (int) w[5];
     k.sensor_ok = w[12] != 0;
-    k.temperatur = k.sensor_ok ? w[6] / 100.0f : NAN;
-    k.feuchte = k.sensor_ok ? w[7] / 100.0f : NAN;
-    k.heizflaeche = w[8] == -32768 ? NAN : w[8] / 10.0f;
-    k.leistung = (int) w[9];
-    k.fehler = (int) w[10];
-    k.luefter = w[11] != 0;
-    k.gueltig = true;
-    k.zeit_ms = millis();
-    this->zeilen_ok_++;
+    k.temperature = k.sensor_ok ? w[6] / 100.0f : NAN;
+    k.humidity = k.sensor_ok ? w[7] / 100.0f : NAN;
+    k.heater_surface = w[8] == -32768 ? NAN : w[8] / 10.0f;
+    k.power = (int) w[9];
+    k.fault = (int) w[10];
+    k.fan = w[11] != 0;
+    k.valid = true;
+    k.time_ms = millis();
+    this->lines_ok_++;
     return;
   }
-  this->zeilen_fehler_++;
+  this->lines_rejected_++;
 }
 
-bool X4LComponent::verbunden() const {
-  uint32_t jetzt = millis();
-  return this->kammer_[0].gueltig && jetzt - this->kammer_[0].zeit_ms < 5000;
+bool X4LComponent::connected() const {
+  uint32_t now = millis();
+  return this->chamber_[0].valid && now - this->chamber_[0].time_ms < 5000;
 }
 
-void X4LComponent::befehl(const char *name, int kammer) {
+void X4LComponent::command(const char *name, int chamber) {
   char z[48];
-  int n = snprintf(z, sizeof(z), "!%s,%d", name, kammer & 1);
-  snprintf(z + n, sizeof(z) - n, "*%02X\n", pruefsumme(z + 1, z + n));
+  int n = snprintf(z, sizeof(z), "!%s,%d", name, chamber & 1);
+  snprintf(z + n, sizeof(z) - n, "*%02X\n", checksum(z + 1, z + n));
   this->write_str(z);
-  ESP_LOGI(TAG, "Befehl %s", z);
+  ESP_LOGI(TAG, "Command %s", z);
 }
 
-void X4LComponent::befehl(const char *name, int kammer, int wert) {
+void X4LComponent::command(const char *name, int chamber, int value) {
   char z[48];
-  int n = snprintf(z, sizeof(z), "!%s,%d,%d", name, kammer & 1, wert);
-  snprintf(z + n, sizeof(z) - n, "*%02X\n", pruefsumme(z + 1, z + n));
+  int n = snprintf(z, sizeof(z), "!%s,%d,%d", name, chamber & 1, value);
+  snprintf(z + n, sizeof(z) - n, "*%02X\n", checksum(z + 1, z + n));
   this->write_str(z);
-  ESP_LOGI(TAG, "Befehl %s", z);
+  ESP_LOGI(TAG, "Command %s", z);
 }
 
 void X4LComponent::dump_config() {
-  ESP_LOGCONFIG(TAG, "SpacePi X4L (eigene Firmware), Version Trockner: %s", this->version_.c_str());
-  ESP_LOGCONFIG(TAG, "  Zeilen ok/fehlerhaft: %u/%u", (unsigned) this->zeilen_ok_, (unsigned) this->zeilen_fehler_);
+  ESP_LOGCONFIG(TAG, "SpacePi X4L (custom firmware), dryer version: %s", this->version_.c_str());
+  ESP_LOGCONFIG(TAG, "  Lines ok/rejected: %u/%u", (unsigned) this->lines_ok_, (unsigned) this->lines_rejected_);
 }
 
-// ---------- Thermostat je Kammer ----------
+// ---------- thermostat per chamber ----------
 
 climate::ClimateTraits X4LClimate::traits() {
   auto t = climate::ClimateTraits();
@@ -139,41 +139,41 @@ climate::ClimateTraits X4LClimate::traits() {
 void X4LClimate::control(const climate::ClimateCall &call) {
   if (this->parent_ == nullptr) return;
   if (call.get_target_temperature().has_value()) {
-    int soll = (int) lroundf(*call.get_target_temperature());
-    this->parent_->befehl("SOLL", this->kammer_, soll);
+    int setpoint = (int) lroundf(*call.get_target_temperature());
+    this->parent_->command("SOLL", this->chamber_, setpoint);   // SOLL = setpoint (protocol token)
   }
   if (call.get_mode().has_value()) {
-    if (*call.get_mode() == climate::CLIMATE_MODE_HEAT) this->parent_->befehl("START", this->kammer_);
-    else this->parent_->befehl("STOP", this->kammer_);
+    if (*call.get_mode() == climate::CLIMATE_MODE_HEAT) this->parent_->command("START", this->chamber_);
+    else this->parent_->command("STOP", this->chamber_);
   }
-  // Der Zustand kommt mit der naechsten Statuszeile zurueck (loop()).
+  // The new state comes back with the next status line (loop()).
 }
 
 void X4LClimate::loop() {
   if (this->parent_ == nullptr) return;
-  const KammerStatus &k = this->parent_->kammer(this->kammer_);
-  if (!k.gueltig || millis() - this->letzte_ausgabe_ < 1000) return;
-  this->letzte_ausgabe_ = millis();
-  auto modus = k.laeuft ? climate::CLIMATE_MODE_HEAT : climate::CLIMATE_MODE_OFF;
-  auto aktion = !k.laeuft ? climate::CLIMATE_ACTION_OFF
-                          : (k.leistung > 0 ? climate::CLIMATE_ACTION_HEATING : climate::CLIMATE_ACTION_IDLE);
-  // Zustand (Modus, Aktion, Soll) sofort melden. Messwerte nur bei Aenderung ab 0,2 K bzw. 1 %
-  // und hoechstens alle 10 s - sonst schreibt der HA-Recorder jede Sekunde (10.11.2026).
-  bool zustand = this->mode != modus || this->action != aktion || this->target_temperature != (float) k.soll;
-  auto geaendert = [](float alt, float neu, float schwelle) {
-    if (std::isnan(alt) != std::isnan(neu)) return true;
-    return !std::isnan(neu) && fabsf(alt - neu) >= schwelle;
+  const ChamberStatus &k = this->parent_->chamber(this->chamber_);
+  if (!k.valid || millis() - this->last_check_ < 1000) return;
+  this->last_check_ = millis();
+  auto mode = k.running ? climate::CLIMATE_MODE_HEAT : climate::CLIMATE_MODE_OFF;
+  auto action = !k.running ? climate::CLIMATE_ACTION_OFF
+                           : (k.power > 0 ? climate::CLIMATE_ACTION_HEATING : climate::CLIMATE_ACTION_IDLE);
+  // Report state changes (mode, action, setpoint) at once. Readings only on a change of at least
+  // 0.2 K or 1 % and at most every 10 s - otherwise the HA recorder writes every second.
+  bool state = this->mode != mode || this->action != action || this->target_temperature != (float) k.setpoint;
+  auto changed = [](float old_value, float new_value, float threshold) {
+    if (std::isnan(old_value) != std::isnan(new_value)) return true;
+    return !std::isnan(new_value) && fabsf(old_value - new_value) >= threshold;
   };
-  bool messwert = geaendert(this->current_temperature, k.temperatur, 0.2f) ||
-                  geaendert(this->current_humidity, k.feuchte, 1.0f);
-  uint32_t jetzt = millis();
-  if (!zustand && !(messwert && jetzt - this->letzte_meldung_ >= 10000)) return;
-  this->mode = modus;
-  this->action = aktion;
-  this->target_temperature = k.soll;
-  this->current_temperature = k.temperatur;
-  this->current_humidity = k.feuchte;
-  this->letzte_meldung_ = jetzt;
+  bool reading = changed(this->current_temperature, k.temperature, 0.2f) ||
+                 changed(this->current_humidity, k.humidity, 1.0f);
+  uint32_t now = millis();
+  if (!state && !(reading && now - this->last_publish_ >= 10000)) return;
+  this->mode = mode;
+  this->action = action;
+  this->target_temperature = k.setpoint;
+  this->current_temperature = k.temperature;
+  this->current_humidity = k.humidity;
+  this->last_publish_ = now;
   this->publish_state();
 }
 

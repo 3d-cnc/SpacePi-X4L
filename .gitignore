@@ -1,12 +1,12 @@
-# Eigene Geraetedaten - niemals einchecken
-sicherung/
+# Your own device data - never commit
+backup/
 *.bin
 !docs/**/*.bin
 esphome/secrets.yaml
-protokolle/
-mitschnitte/
+logs/
+captures/
 *.sr
-# Bauergebnisse
+# Build output
 firmware/build/
 esphome/.esphome/
 __pycache__/

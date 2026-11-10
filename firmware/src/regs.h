@@ -1,12 +1,12 @@
-/* Register des GD32F303CBT6 (registergleich mit STM32F103, daher STM32-Namen).
- * Nur was die Firmware wirklich benutzt. */
+/* Registers of the GD32F303CBT6 (register-compatible with the STM32F103, hence STM32 names).
+ * Only what this firmware actually uses. */
 #ifndef REGS_H
 #define REGS_H
 #include <stdint.h>
 
 #define REG(a) (*(volatile uint32_t *)(a))
 
-/* Takt (RCU) */
+/* Clock (RCU) and flash controller */
 #define RCC_CR       REG(0x40021000)
 #define RCC_CFGR     REG(0x40021004)
 #define RCC_APB2ENR  REG(0x40021018)
@@ -29,13 +29,13 @@
 #define GPIO_BRR(p)  REG((p) + 0x14)
 #define AFIO_MAPR    REG(0x40010004)
 
-/* Pin-Modi (4 Bit je Pin: CNF[1:0] MODE[1:0]) */
-#define M_ANALOG   0x0u   /* Analogeingang */
-#define M_FLOAT    0x4u   /* Eingang ohne Pull */
-#define M_PULL     0x8u   /* Eingang mit Pull (ODR: 1 = hoch, 0 = runter) */
-#define M_OUT_PP   0x2u   /* Ausgang Push-Pull, 2 MHz */
-#define M_OUT_OD   0x6u   /* Ausgang Open-Drain, 2 MHz */
-#define M_AF_PP    0xBu   /* Alternativfunktion Push-Pull, 50 MHz */
+/* Pin modes (4 bits per pin: CNF[1:0] MODE[1:0]) */
+#define M_ANALOG   0x0u   /* analog input */
+#define M_FLOAT    0x4u   /* input without pull */
+#define M_PULL     0x8u   /* input with pull (ODR: 1 = up, 0 = down) */
+#define M_OUT_PP   0x2u   /* output push-pull, 2 MHz */
+#define M_OUT_OD   0x6u   /* output open-drain, 2 MHz */
+#define M_AF_PP    0xBu   /* alternate function push-pull, 50 MHz */
 
 /* USART0 (STM32: USART1) */
 #define USART_SR   REG(0x40013800)
@@ -52,7 +52,7 @@
 #define ADC_SQR3   REG(0x40012434)
 #define ADC_DR     REG(0x4001244C)
 
-/* Unabhaengiger Watchdog (FWDGT / IWDG) */
+/* Independent watchdog (FWDGT / IWDG) */
 #define IWDG_KR    REG(0x40003000)
 #define IWDG_PR    REG(0x40003004)
 #define IWDG_RLR   REG(0x40003008)
@@ -66,7 +66,7 @@
 #define DWT_CTRL   REG(0xE0001000)
 #define DWT_CYCCNT REG(0xE0001004)
 
-/* NVIC: Interrupt-Freigabe (ISER0 = IRQ 0..31, ISER1 = IRQ 32..63) */
+/* NVIC interrupt enable (ISER0 = IRQ 0..31, ISER1 = IRQ 32..63) */
 #define NVIC_ISER1 REG(0xE000E104)
 #define USART0_IRQ 37
 

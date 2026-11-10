@@ -1,4 +1,4 @@
-"""ESPHome-Komponente fuer den SpacePi X4L mit eigener Firmware (UART-Protokoll ab 1.3.0)."""
+"""ESPHome component for the SpacePi X4L with custom firmware (UART protocol 1.3.0 or later)."""
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import uart

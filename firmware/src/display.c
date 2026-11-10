@@ -1,6 +1,6 @@
-#include "anzeige.h"
+#include "display.h"
 
-/* Zeichensatz: Bit 0..6 = Segment a..g */
+/* Character set: bit 0..6 = segment a..g */
 #define A 0x01
 #define B 0x02
 #define C 0x04
@@ -9,9 +9,9 @@
 #define F 0x20
 #define G 0x40
 
-static uint8_t zeichen(char z)
+static uint8_t glyph(char c)
 {
-    switch (z) {
+    switch (c) {
     case '0': case 'O': return A|B|C|D|E|F;
     case '1': case 'I': return B|C;
     case '2': return A|B|G|E|D;
@@ -47,36 +47,36 @@ static uint8_t zeichen(char z)
     }
 }
 
-/* Normale Ziffer: a 0x80, b 0x40, c 0x20, d 0x10, f 0x08, g 0x04, e 0x02 */
+/* Normal digit: a 0x80, b 0x40, c 0x20, d 0x10, f 0x08, g 0x04, e 0x02 */
 static const uint8_t NORMAL[7] = { 0x80, 0x40, 0x20, 0x10, 0x02, 0x08, 0x04 };   /* a..g */
-/* Uhrzeit: linke Seite (f, g, e) im Byte der Ziffer, rechte Seite (a, b, c, d) im naechsten */
-static const uint8_t ZEIT[7]   = { 0x08, 0x04, 0x02, 0x01, 0x20, 0x80, 0x40 };   /* a..g */
-#define ZEIT_RECHTS (A|B|C|D)
+/* Time: left side (f, g, e) in the digit's byte, right side (a, b, c, d) in the next one */
+static const uint8_t TIME[7]   = { 0x08, 0x04, 0x02, 0x01, 0x20, 0x80, 0x40 };   /* a..g */
+#define TIME_RIGHT (A|B|C|D)
 
-void bild_leeren(uint8_t *b) { for (int i = 0; i < BILD_BYTES; i++) b[i] = 0; }
+void frame_clear(uint8_t *b) { for (int i = 0; i < FRAME_BYTES; i++) b[i] = 0; }
 
-void bild_symbol(uint8_t *b, uint16_t sym, int an)
+void frame_symbol(uint8_t *b, uint16_t sym, int on)
 {
     uint8_t byte = (uint8_t)(sym >> 8), bit = (uint8_t)sym;
-    if (an) b[byte] |= bit; else b[byte] &= (uint8_t)~bit;
+    if (on) b[byte] |= bit; else b[byte] &= (uint8_t)~bit;
 }
 
-void bild_ziffer(uint8_t *b, int byte, char z)
+void frame_digit(uint8_t *b, int byte, char c)
 {
-    uint8_t s = zeichen(z);
+    uint8_t s = glyph(c);
     for (int i = 0; i < 7; i++) if (s & (1u << i)) b[byte] |= NORMAL[i];
 }
 
-void bild_zeit(uint8_t *b, const char *sechs)
+void frame_time(uint8_t *b, const char *six)
 {
-    for (int k = 0; k < 6 && sechs[k]; k++) {
-        uint8_t s = zeichen(sechs[k]);
+    for (int k = 0; k < 6 && six[k]; k++) {
+        uint8_t s = glyph(six[k]);
         for (int i = 0; i < 7; i++)
-            if (s & (1u << i)) b[((1u << i) & ZEIT_RECHTS) ? 3 + k : 2 + k] |= ZEIT[i];
+            if (s & (1u << i)) b[((1u << i) & TIME_RIGHT) ? 3 + k : 2 + k] |= TIME[i];
     }
 }
 
-void bild_text(uint8_t *b, int erstes_byte, int anzahl, const char *text)
+void frame_text(uint8_t *b, int first_byte, int count, const char *text)
 {
-    for (int i = 0; i < anzahl && text[i]; i++) bild_ziffer(b, erstes_byte + i, text[i]);
+    for (int i = 0; i < count && text[i]; i++) frame_digit(b, first_byte + i, text[i]);
 }

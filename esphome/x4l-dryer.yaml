@@ -1,0 +1,282 @@
+# ESP32-C3 SuperMini as a Wi-Fi bridge for the Creality SpacePi X4L with custom firmware (1.3.0 or later).
+# Wiring: ESP GPIO20 (RX) <- dryer J26 TX, ESP GPIO21 (TX) -> dryer J26 RX, GND <-> GND.
+# All safety functions (fan interlock, temperature limits) live in the dryer.
+#
+# Build and flash over USB:   esphome run x4l-dryer.yaml
+# After that every update goes over Wi-Fi (OTA).
+
+esphome:
+  name: x4l-dryer
+  friendly_name: SpacePi X4L
+  comment: Filament dryer with custom firmware
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+external_components:
+  - source:
+      type: local
+      path: components
+
+logger:
+  hardware_uart: USB_SERIAL_JTAG     # log over USB, keeps the UART0 pins free for the dryer
+
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  # ESP32-C3 SuperMini: at full transmit power the connection fails ("Auth Expired",
+  # "4-Way Handshake Timeout") - a known antenna problem of this board.
+  output_power: 8.5dB
+  # Supplied from the 5 V linear regulator of the dryer (AMS1117 on 12 V): power save mode
+  # roughly halves the average current and with it the heat in the regulator.
+  power_save_mode: light
+  ap:
+    ssid: X4L-Dryer-Setup            # fallback access if the Wi-Fi cannot be reached
+
+captive_portal:
+
+web_server:
+  port: 80
+
+uart:
+  id: uart_dryer
+  tx_pin: GPIO21
+  rx_pin: GPIO20
+  baud_rate: 115200
+
+x4l:
+  id: dryer
+  uart_id: uart_dryer
+
+# ---------------- thermostats ----------------
+climate:
+  - platform: x4l
+    name: Left chamber
+    chamber: left
+  - platform: x4l
+    name: Right chamber
+    chamber: right
+
+# ---------------- readings ----------------
+sensor:
+  - platform: template
+    name: Left temperature
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 10s
+    lambda: return id(dryer).chamber(0).temperature;
+  - platform: template
+    name: Right temperature
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 10s
+    lambda: return id(dryer).chamber(1).temperature;
+  - platform: template
+    name: Left humidity
+    unit_of_measurement: "%"
+    device_class: humidity
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 10s
+    lambda: return id(dryer).chamber(0).humidity;
+  - platform: template
+    name: Right humidity
+    unit_of_measurement: "%"
+    device_class: humidity
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 10s
+    lambda: return id(dryer).chamber(1).humidity;
+  - platform: template
+    name: Left heater surface
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 10s
+    lambda: return id(dryer).chamber(0).heater_surface;
+  - platform: template
+    name: Right heater surface
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 10s
+    lambda: return id(dryer).chamber(1).heater_surface;
+  - platform: template
+    name: Left heater power
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 10s
+    lambda: return id(dryer).chamber(0).power;
+  - platform: template
+    name: Right heater power
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 10s
+    lambda: return id(dryer).chamber(1).power;
+  - platform: template
+    name: Left time remaining
+    unit_of_measurement: min
+    device_class: duration
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: |-
+      auto &k = id(dryer).chamber(0);
+      return k.running ? (k.remaining_s + 59) / 60 : 0;
+  - platform: template
+    name: Right time remaining
+    unit_of_measurement: min
+    device_class: duration
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: |-
+      auto &k = id(dryer).chamber(1);
+      return k.running ? (k.remaining_s + 59) / 60 : 0;
+  - platform: wifi_signal
+    name: Wi-Fi signal
+    update_interval: 60s
+  - platform: template
+    name: Lines from dryer
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    state_class: total_increasing
+    update_interval: 60s
+    lambda: return id(dryer).lines_ok();
+  - platform: template
+    name: Rejected lines
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    state_class: total_increasing
+    update_interval: 60s
+    lambda: return id(dryer).lines_rejected();
+
+binary_sensor:
+  - platform: template
+    name: Connection to dryer
+    device_class: connectivity
+    entity_category: diagnostic
+    lambda: return id(dryer).connected();
+  - platform: template
+    name: Left fan
+    device_class: running
+    lambda: return id(dryer).chamber(0).fan;
+  - platform: template
+    name: Right fan
+    device_class: running
+    lambda: return id(dryer).chamber(1).fan;
+  - platform: template
+    name: Left problem
+    device_class: problem
+    lambda: return id(dryer).chamber(0).fault != 0;
+  - platform: template
+    name: Right problem
+    device_class: problem
+    lambda: return id(dryer).chamber(1).fault != 0;
+
+text_sensor:
+  - platform: template
+    name: Left fault
+    update_interval: 5s
+    lambda: |-
+      static const char *const T[] = {"none", "1 chamber sensor", "2 heater sensor", "3 heater surface too hot",
+                                      "4 chamber too hot", "5 heater does not switch off - unplug the dryer!",
+                                      "6 heater does not heat"};
+      int f = id(dryer).chamber(0).fault;
+      return std::string(f >= 0 && f <= 6 ? T[f] : "unknown");
+  - platform: template
+    name: Right fault
+    update_interval: 5s
+    lambda: |-
+      static const char *const T[] = {"none", "1 chamber sensor", "2 heater sensor", "3 heater surface too hot",
+                                      "4 chamber too hot", "5 heater does not switch off - unplug the dryer!",
+                                      "6 heater does not heat"};
+      int f = id(dryer).chamber(1).fault;
+      return std::string(f >= 0 && f <= 6 ? T[f] : "unknown");
+  - platform: template
+    name: Dryer firmware
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: return id(dryer).version();
+
+# ---------------- settings ----------------
+select:
+  - platform: template
+    name: Left material
+    options: ["PLA", "PETG", "ABS", "ASA", "TPU", "PA", "PC", "USER"]
+    update_interval: 5s
+    lambda: |-
+      int m = id(dryer).chamber(0).material;
+      return std::string(m >= 0 && m < x4l::MATERIAL_COUNT ? x4l::MATERIALS[m] : "PLA");
+    set_action:
+      - lambda: |-
+          for (int i = 0; i < x4l::MATERIAL_COUNT; i++)
+            if (x == x4l::MATERIALS[i]) id(dryer).command("MAT", 0, i);
+  - platform: template
+    name: Right material
+    options: ["PLA", "PETG", "ABS", "ASA", "TPU", "PA", "PC", "USER"]
+    update_interval: 5s
+    lambda: |-
+      int m = id(dryer).chamber(1).material;
+      return std::string(m >= 0 && m < x4l::MATERIAL_COUNT ? x4l::MATERIALS[m] : "PLA");
+    set_action:
+      - lambda: |-
+          for (int i = 0; i < x4l::MATERIAL_COUNT; i++)
+            if (x == x4l::MATERIALS[i]) id(dryer).command("MAT", 1, i);
+
+number:
+  - platform: template
+    name: Left duration
+    unit_of_measurement: min
+    min_value: 30
+    max_value: 2880
+    step: 30
+    mode: box
+    update_interval: 5s
+    lambda: return id(dryer).chamber(0).duration_min;
+    set_action:
+      - lambda: id(dryer).command("DAUER", 0, (int) x);   # DAUER = duration (protocol token)
+  - platform: template
+    name: Right duration
+    unit_of_measurement: min
+    min_value: 30
+    max_value: 2880
+    step: 30
+    mode: box
+    update_interval: 5s
+    lambda: return id(dryer).chamber(1).duration_min;
+    set_action:
+      - lambda: id(dryer).command("DAUER", 1, (int) x);
+
+button:
+  - platform: template
+    name: Left acknowledge fault
+    on_press:
+      - lambda: id(dryer).command("QUIT", 0);
+  - platform: template
+    name: Right acknowledge fault
+    on_press:
+      - lambda: id(dryer).command("QUIT", 1);
+  - platform: restart
+    name: Restart ESP
+    entity_category: config

@@ -1,95 +1,97 @@
-# Hardware des Creality SpacePi X4L
+# Hardware of the Creality SpacePi X4L
 
-Gilt für die Steuerplatine **„Creality Dryer_Pro_V14“** mit Mikrocontroller **GigaDevice GD32F303CBT6**
-(Cortex-M4, 128 KB Flash, 8-MHz-Quarz). Alle Angaben wurden am echten Gerät gemessen bzw. getestet.
+Applies to the control board **"Creality Dryer_Pro_V14"** with the microcontroller **GigaDevice GD32F303CBT6**
+(Cortex-M4, 128 KB flash, 8 MHz crystal). Everything here was measured or tested on a real device.
 
-![Hauptplatine](fotos/hauptplatine.jpg)
+![Main board](photos/mainboard.jpg)
 
-## Baugruppen
+## Building blocks
 
-| Baugruppe | Bauteile |
+| Block | Parts |
 |---|---|
-| Netzteil | isoliertes AC/DC-Modul (grüne Platine) → **12 V**; AMS1117-5.0 → 5 V; AMS1117-3.3 → 3,3 V |
-| Heizungen | je Kammer 200 W PTC, Triac T1635-6Z mit Optotriac EL3063 (Nulldurchgang) |
-| Lüfter | je Kammer ein 2-poliger 12-V-Lüfter über Transistor |
-| Sensoren | je Kammer ein NTC an der Heizfläche (100 kΩ) und ein AHT20 (Temperatur/Feuchte, I2C) |
-| Display | Segment-LCD „YXD-BS0023-3“ mit eigenem Treiberchip, 4 Touch-Tasten, über 10-poligen Wannenstecker J12 |
-| Service | J25 = SWD (5 Lötlöcher), J26 = UART (3 Lötlöcher) – Stiftleisten müssen eingelötet werden |
+| Power supply | isolated AC/DC module (green board) → **12 V**; AMS1117-5.0 → 5 V; AMS1117-3.3 → 3.3 V |
+| Heaters | 200 W PTC per chamber, triac T1635-6Z with opto-triac EL3063 (zero crossing) |
+| Fans | one 2-wire 12 V fan per chamber, switched by a transistor |
+| Sensors | per chamber one NTC on the heater surface (100 kΩ) and one AHT20 (temperature/humidity, I2C) |
+| Display | segment LCD "YXD-BS0023-3" with its own driver chip, 4 touch keys, on the 10-pin box header J12 |
+| Service | J25 = SWD (5 holes), J26 = UART (3 holes) – pin headers have to be soldered in |
 
-## Pinbelegung GD32F303CBT6
+## Pinout GD32F303CBT6
 
-| Pin | LQFP48 | Funktion | Bemerkung |
+| Pin | LQFP48 | Function | Note |
 |---|---|---|---|
-| PA0 | 10 | NTC Heizung **links** | ADC, Teiler 4,7 kΩ nach 3,3 V |
-| PA1 | 11 | NTC Heizung **rechts** | ADC |
-| PA2 | 12 | Taste **L/R** | aktiv High, interner Pulldown |
-| PA3 | 13 | Taste **Pfeil runter** | aktiv High |
-| PA4 | 14 | Taste **Pfeil hoch** | aktiv High |
-| PA5 | 15 | Taste **Einstellung (Zahnrad)** | aktiv High |
-| PA6 | 16 | Display (Versorgung/Licht) | beim Start High |
-| **PA9** | 30 | **Heizung rechts** | High = an |
-| **PA10** | 31 | **Heizung links** | High = an |
-| PB0 | 18 | Lüfter **links** | High = an |
-| PB1 | 19 | Lüfter **rechts** | High = an |
-| PB6 | 42 | UART TX → J26 „TX“ | USART0, umgeleitet (Remap) |
-| PB7 | 43 | UART RX ← J26 „RX“ | USART0, umgeleitet |
-| PB10 | 21 | Display-Takt | Software-2-Draht |
-| PB11 | 22 | Display-Daten | Software-2-Draht |
-| PB12 / PB13 | 25 / 26 | AHT20 **links**: SCL / SDA | Software-I2C, Adresse 0x38 |
-| PB14 / PB15 | 27 / 28 | AHT20 **rechts**: SCL / SDA | Software-I2C, Adresse 0x38 |
+| PA0 | 10 | NTC heater **left** | ADC, divider 4.7 kΩ to 3.3 V |
+| PA1 | 11 | NTC heater **right** | ADC |
+| PA2 | 12 | key **L/R** | active high, internal pull-down |
+| PA3 | 13 | key **arrow down** | active high |
+| PA4 | 14 | key **arrow up** | active high |
+| PA5 | 15 | key **settings (gear)** | active high |
+| PA6 | 16 | display (supply/backlight) | high at start |
+| **PA9** | 30 | **heater right** | high = on |
+| **PA10** | 31 | **heater left** | high = on |
+| PB0 | 18 | fan **left** | high = on |
+| PB1 | 19 | fan **right** | high = on |
+| PB6 | 42 | UART TX → J26 "TX" | USART0, remapped |
+| PB7 | 43 | UART RX ← J26 "RX" | USART0, remapped |
+| PB10 | 21 | display clock | software 2-wire |
+| PB11 | 22 | display data | software 2-wire |
+| PB12 / PB13 | 25 / 26 | AHT20 **left**: SCL / SDA | software I2C, address 0x38 |
+| PB14 / PB15 | 27 / 28 | AHT20 **right**: SCL / SDA | software I2C, address 0x38 |
 | PA13 / PA14 | 34 / 37 | SWD (DIO / CLK) → J25 | |
 
-> ⚠ **PA9/PA10 sind die Heizungen.** Der eingebaute Bootloader des GD32 arbeitet auf genau diesen
-> Pins (USART0 ohne Remap). Deshalb wird die Firmware ausschließlich per SWD geflasht.
+> ⚠ **PA9/PA10 are the heaters.** The built-in bootloader of the GD32 uses exactly these pins
+> (USART0 without remap). That is why the firmware is flashed over SWD only.
 
-![Mikrocontroller und Leisten](fotos/mcu-gd32f303.webp)
+![Microcontroller and headers](photos/mcu-gd32f303.webp)
 
-## Service-Leisten
+## Service headers
 
-**J25 – SWD** (5-polig, Beschriftung auf der Platine): `RST` `GND` `CLK` `DIO` `VCC`
-(VCC = 3,3 V der Platine). Die RST-Leitung greift mit OpenOCD nicht zuverlässig, geflasht wird per
-Software-Reset – RST muss nicht angeschlossen werden.
+**J25 – SWD** (5 pins, labelled on the board): `RST` `GND` `CLK` `DIO` `VCC`
+(VCC = 3.3 V of the board). The RST line does not work reliably with OpenOCD, flashing uses a
+software reset – RST does not need to be connected.
 
-**J26 – UART** (3-polig): `TX` `RX` `GND`. Die Beschriftung gilt aus Sicht des Trockners:
-**TX = Trockner sendet** (PB6), **RX = Trockner empfängt** (PB7). 3,3-V-Pegel, 115200 Baud.
+**J26 – UART** (3 pins): `TX` `RX` `GND`. The labels are from the dryer's point of view:
+**TX = dryer sends** (PB6), **RX = dryer receives** (PB7). 3.3 V levels, 115200 baud.
 
-![J25 und J26](fotos/leisten-j25-j26.webp)
+![J25 and J26](photos/headers-j25-j26.webp)
 
-## Display-Stecker J12 (10-polig)
+## Display connector J12 (10 pins)
 
-Nummerierung: obere Reihe 1–5 (Kodiernase zwischen 2 und 4), untere Reihe 6–10.
+Numbering: top row 1–5 (key notch between 2 and 4), bottom row 6–10.
 
-| Pin | Funktion |
+| Pin | Function |
 |---|---|
-| 1 | Taste Pfeil hoch |
-| 2 | Taste L/R |
-| 3 | **5 V** (Dauerversorgung – hier wird der ESP32-C3 angeschlossen) |
-| 4 | Display-Daten |
+| 1 | key arrow up |
+| 2 | key L/R |
+| 3 | **5 V** (always on – the ESP32-C3 is connected here) |
+| 4 | display data |
 | 5 | 5 V |
-| 6 | Taste Einstellung |
-| 7 | Taste Pfeil runter |
+| 6 | key settings |
+| 7 | key arrow down |
 | 8 | GND |
-| 9 | Display-Takt (~40–50 kHz) |
+| 9 | display clock (~40–50 kHz) |
 | 10 | GND |
 
-## Display-Protokoll
+![Back of the display board](photos/display-back.jpg)
 
-I2C-ähnlich per Software an PB10/PB11, Adresse `0x7E`.
+## Display protocol
 
-- Start: PA6 auf High, dann drei Befehle je als `7E <befehl>`: `9C`, `C0`, `72`.
-- Bild: `7E 00` + **20 Datenbytes** (= 160 Segmente).
-- Normale Ziffern belegen ein Byte: `0x80` a (oben), `0x40` b, `0x20` c, `0x10` d, `0x08` f, `0x04` g,
-  `0x02` e, `0x01` ein Symbol.
-- Die Uhrzeit ist um ein halbes Byte versetzt: obere Hälfte = f/g/e (+ Symbol) der Ziffer,
-  untere Hälfte des nächsten Bytes = a/b/c/d.
-- Byte-Plan: 0/1 Solltemperatur (klein), 2–8 Uhrzeit (+ L, „Time“, °C/°F klein, Tastenrahmen,
-  Doppelpunkte, Ring links), 9/10 Feuchte, 11/12 Temperatur groß, 13 Ring rechts, R, PV, °C/°F groß,
-  14–19 Material (+ L/R-Taste, ON, AUTO, OFF, „Material“).
+I2C-like, bit-banged on PB10/PB11, address `0x7E`.
 
-Die vollständige Zuordnung aller Symbole steht in `werkzeuge/lcd_bild.py` und `firmware/src/anzeige.h`.
+- Start: PA6 high, then three commands, each as `7E <command>`: `9C`, `C0`, `72`.
+- Frame: `7E 00` + **20 data bytes** (= 160 segments).
+- Normal digits use one byte: `0x80` a (top), `0x40` b, `0x20` c, `0x10` d, `0x08` f, `0x04` g,
+  `0x02` e, `0x01` a symbol.
+- The clock is shifted by half a byte: upper half = f/g/e (+ symbol) of the digit,
+  lower half of the next byte = a/b/c/d.
+- Byte map: 0/1 target temperature (small), 2–8 clock (+ L, "Time", small °C/°F, key frame,
+  colons, left ring), 9/10 humidity, 11/12 big temperature, 13 right ring, R, PV, big °C/°F,
+  14–19 material (+ L/R key, ON, AUTO, OFF, "Material").
 
-## Sensoren
+The complete map of all symbols is in `tools/lcd_frame.py` and `firmware/src/display.h`.
 
-- **AHT20**: Messbefehl `AC 33 00`, Ergebnis nach ~80 ms (Status + 5 Datenbytes + CRC).
-- **NTC**: R = 4700 · ADC / (4096 − ADC); Kennlinie per Steinhart-Hart (`werkzeuge/ntc_tabelle.py`),
-  Abweichung unter 0,2 K zwischen −15 und 150 °C.
+## Sensors
+
+- **AHT20**: measure command `AC 33 00`, result after ~80 ms (status + 5 data bytes + CRC).
+- **NTC**: R = 4700 · ADC / (4096 − ADC); curve from Steinhart-Hart (`tools/ntc_table.py`),
+  deviation below 0.2 K between −15 and 150 °C.
