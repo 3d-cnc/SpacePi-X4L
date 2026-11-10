@@ -1,0 +1,13 @@
+# Eigene Geraetedaten - niemals einchecken
+sicherung/
+*.bin
+!docs/**/*.bin
+esphome/secrets.yaml
+protokolle/
+mitschnitte/
+*.sr
+# Bauergebnisse
+firmware/build/
+esphome/.esphome/
+__pycache__/
+*.pyc
